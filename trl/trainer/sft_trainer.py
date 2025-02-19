@@ -816,13 +816,11 @@ class SFTTrainer(Trainer):
             correct_tokens = correct_predictions.sum()
 
             # Gather the correct_tokens and total_tokens across all processes
-            correct_tokens = self.accelerator.gather_for_metrics(correct_tokens)
-            total_tokens = self.accelerator.gather_for_metrics(total_tokens)
+            correct_token_sum = self.accelerator.gather_for_metrics(correct_tokens).detach().sum()
+            total_token_sum = self.accelerator.gather_for_metrics(total_tokens).detach().sum()
 
             # Compute the mean token accuracy and log it
-            total_sum = total_tokens.sum()
-            accuracy = (correct_tokens.sum() / total_sum).item() if total_sum > 0 else 0.0
-            self._metrics[mode]["mean_token_accuracy"].append(accuracy)
+            self._metrics[mode]["mean_token_accuracy"].append((correct_token_sum, total_token_sum))
 
         return (loss, outputs) if return_outputs else loss
 
@@ -833,6 +831,13 @@ class SFTTrainer(Trainer):
 
     def log(self, logs: dict[str, float], start_time: Optional[float] = None) -> None:
         mode = "train" if self.model.training else "eval"
+        key = "mean_token_accuracy"
+        val = self._metrics[mode].get(key, [])
+        if isinstance(val[0], tuple):
+            new_val = []
+            for correct_token_sum, total_token_sum in val:
+                new_val.append((correct_token_sum / total_token_sum).item() if total_token_sum > 0 else 0.0)
+            self._metrics[mode][key] = new_val
         metrics = {key: sum(val) / len(val) for key, val in self._metrics[mode].items()}  # average the metrics
 
         # This method can be called both in training and evaluation. When called in evaluation, the keys in `logs`
