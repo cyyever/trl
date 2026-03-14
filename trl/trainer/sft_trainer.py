@@ -1181,7 +1181,7 @@ class SFTTrainer(_BaseTrainer):
                 column_names = get_dataset_column_names(dataset)
                 dataset = dataset.select_columns(collator_expected_keys.intersection(column_names))
 
-        if args.shuffle_dataset:
+        if args.shuffle_dataset and not packing:
             dataset = dataset.shuffle(seed=args.seed)
 
         return dataset
